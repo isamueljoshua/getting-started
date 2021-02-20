@@ -1,0 +1,5 @@
+1. Create a Dockerfile without any extension
+2. Add the respective commands to be run by docker itself
+3. docker build -t getting-started .
+4. docker run -dp 3000:3000 getting-started
+5. Go to http://localhost:3000/
