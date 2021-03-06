@@ -3,3 +3,107 @@
 3. docker build -t getting-started .
 4. docker run -dp 3000:3000 getting-started
 5. Go to http://localhost:3000/
+
+
+# Start a dev-mode container
+1. Make sure you don’t have any previous getting-started containers running.
+2.
+docker run -dp 3000:3000 `
+     -w /app -v "$(pwd):/app" `
+     node:12-alpine `
+     sh -c "yarn install && yarn run dev"
+Explanation:
+-dp 3000:3000 - same as before. Run in detached (background) mode and create a port mapping
+-w /app - sets the “working directory” or the current directory that the command will run from
+-v "$(pwd):/app" - bind mount the current directory from the host in the container into the /app directory
+node:12-alpine - the image to use. Note that this is the base image for our app from the Dockerfile
+sh -c "yarn install && yarn run dev" - the command. 
+We’re starting a shell using sh (alpine doesn’t have bash) and running yarn install to install all dependencies and then running yarn run dev. If we look in the package.json, we’ll see that the dev script is starting nodemon.
+
+
+3.
+ docker logs -f <container-id>
+ $ nodemon src/index.js
+ [nodemon] 1.19.2
+ [nodemon] to restart at any time, enter `rs`
+ [nodemon] watching dir(s): *.*
+ [nodemon] starting `node src/index.js`
+ Using sqlite database at /etc/todos/todo.db
+ Listening on port 3000
+
+ When you’re done watching the logs, exit out by hitting Ctrl+C
+
+4. Now, let’s make a change to the app. In the src/static/js/app.js file, let’s change the “Add Item” button to simply say “Add”. This change will be on line 109.
+
+-                         {submitting ? 'Adding...' : 'Add Item'}
++                         {submitting ? 'Adding...' : 'Add'}
+
+5. Simply refresh the page (or open it) and you should see the change reflected in the browser almost immediately. It might take a few seconds for the Node server to restart, so if you get an error, just try refreshing after a few seconds.
+
+6. Feel free to make any other changes you’d like to make. When you’re done, stop the container and build your new image using 
+> docker build -t getting-started ..
+
+
+# Start MySQL
+1. Create the network.
+docker network create todo-app
+
+2. Start a MySQL container and attach it to the network. We’re also going to define a few environment variables that the database will use to initialize the database
+
+docker run -d `
+     --network todo-app --network-alias mysql `
+     -v todo-mysql-data:/var/lib/mysql `
+     -e MYSQL_ROOT_PASSWORD=secret `
+     -e MYSQL_DATABASE=todos `
+     mysql:5.7
+
+3. To confirm we have the database up and running, connect to the database and verify it connects.
+> docker exec -it <mysql-container-id> mysql -p
+
+mysql> SHOW DATABASES;
+
+
+# Connect to MySQL
+1. Start a new container using the nicolaka/netshoot image. Make sure to connect it to the same network.
+> docker run -it --network todo-app nicolaka/netshoot
+
+2. Inside the container, we’re going to use the dig command, which is a useful DNS tool. We’re going to look up the IP address for the hostname mysql
+> dig mysql
+
+
+# Run your app with MySQL
+The todo app supports the setting of a few environment variables to specify MySQL connection settings. They are:
+
+MYSQL_HOST - the hostname for the running MySQL server
+MYSQL_USER - the username to use for the connection
+MYSQL_PASSWORD - the password to use for the connection
+MYSQL_DB - the database to use once connected
+
+1. We’ll specify each of the environment variables above, as well as connect the container to our app network.
+docker run -dp 3000:3000 `
+   -w /app -v "$(pwd):/app" `
+   --network todo-app `
+   -e MYSQL_HOST=mysql `
+   -e MYSQL_USER=root `
+   -e MYSQL_PASSWORD=secret `
+   -e MYSQL_DB=todos `
+   node:12-alpine `
+   sh -c "yarn install && yarn run dev"
+
+2. If we look at the logs for the container (docker logs <container-id>), we should see a message indicating it’s using the mysql database.
+# Previous log messages omitted
+ $ nodemon src/index.js
+ [nodemon] 1.19.2
+ [nodemon] to restart at any time, enter `rs`
+ [nodemon] watching dir(s): *.*
+ [nodemon] starting `node src/index.js`
+ Connected to mysql db at host mysql
+ Listening on port 3000
+
+3. Open the app in your browser and add a few items to your todo list.
+
+4. Connect to the mysql database and prove that the items are being written to the database. Remember, the password is secret.
+docker exec -it <mysql-container-id> mysql -p todos
+
+ mysql> select * from todo_items;
+
